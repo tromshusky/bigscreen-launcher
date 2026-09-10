@@ -29,7 +29,7 @@
         "cp data/icons/com.github.tromshusky.bigscreenLauncher.svg /app/share/icons/hicolor/scalable/apps/ || true",
         "mkdir -p /app/share/applications",
         "cp data/com.github.tromshusky.bigscreenLauncher.desktop /app/share/applications/ || true",
-        "install -Dm755 /dev/stdin /app/bin/bigscreen-launcher << 'EOF'\n#!/usr/bin/env python3\nimport sys\nfrom main import main\nif __name__ == '__main__':\n    sys.exit(main())\nEOF"
+        "install -Dm755 /dev/stdin /app/bin/bigscreen-launcher << 'EOF'\n#!/usr/bin/env python3\nimport sys\nsys.path.insert(0, '/app/lib/python3.11/site-packages')\nfrom main import main\nif __name__ == '__main__':\n    sys.exit(main())\nEOF"
       ],
       "sources": [
         {
