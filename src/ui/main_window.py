@@ -25,7 +25,7 @@ class MainWindow(Gtk.ApplicationWindow):
         # Setup window properties
         self.set_title("BigScreen Launcher")
         self.set_default_size(1920, 1080)
-        self.set_fullscreen(True)
+        self.fullscreen()
         
         # Build UI
         self.setup_ui()
