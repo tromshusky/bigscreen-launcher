@@ -43,16 +43,24 @@ class MainWindow(Gtk.ApplicationWindow):
         main_box.set_margin_top(20)
         main_box.set_margin_bottom(20)
         
-        # Header with clock
-        header_box = Gtk.CenterBox()
+        # Header with title and clock
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
+        header_box.set_hexpand(True)
         
         title_label = Gtk.Label(label="BigScreen Launcher")
         title_label.set_markup("<span size='x-large' weight='bold'>BigScreen Launcher</span>")
-        header_box.set_start_widget(title_label)
+        title_label.set_halign(Gtk.Align.START)
+        header_box.append(title_label)
+        
+        # Spacer to push clock to the right
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        header_box.append(spacer)
         
         self.clock_label = Gtk.Label()
         self.clock_label.set_markup("<span size='large'></span>")
-        header_box.set_end_widget(self.clock_label)
+        self.clock_label.set_halign(Gtk.Align.END)
+        header_box.append(self.clock_label)
         
         main_box.append(header_box)
         
