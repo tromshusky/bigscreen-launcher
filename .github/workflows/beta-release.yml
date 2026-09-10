@@ -11,8 +11,6 @@ permissions:
 jobs:
   beta-release:
     runs-on: ubuntu-latest
-    container:
-      image: bionic/flatpak:latest
     
     steps:
       - name: Checkout code
@@ -27,8 +25,8 @@ jobs:
       
       - name: Install dependencies
         run: |
-          apt-get update
-          apt-get install -y \
+          sudo apt-get update
+          sudo apt-get install -y \
             flatpak \
             flatpak-builder \
             appstream-util \
@@ -37,15 +35,17 @@ jobs:
             python3-gi \
             gir1.2-gtk-4.0
       
-      - name: Add Flatseal remote
+      - name: Add Flathub remote
         run: |
           flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
       
       - name: Build Flatpak
         run: |
-          flatpak-builder --repo=repo \
+          flatpak-builder \
+            --repo=repo \
             --force-clean \
             --ccache \
+            --install-deps-from=flathub \
             build-dir \
             com.github.tromshusky.bigscreenLauncher.json
       
@@ -56,7 +56,7 @@ jobs:
             com.github.tromshusky.bigscreenLauncher
       
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
           name: BigScreen Launcher ${{ steps.version.outputs.version }}
@@ -68,11 +68,6 @@ jobs:
             
             ### Installation
             
-            ```bash
-            flatpak install bigscreen-launcher-${{ steps.version.outputs.version }}.flatpak
-            ```
-            
-            Or use the flatpak file directly:
             ```bash
             flatpak install --bundle bigscreen-launcher-${{ steps.version.outputs.version }}.flatpak
             ```
