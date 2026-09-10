@@ -1,0 +1,91 @@
+name: Beta Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  beta-release:
+    runs-on: ubuntu-latest
+    container:
+      image: bionic/flatpak:latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Generate version tag
+        id: version
+        run: |
+          VERSION="v$(date +'%Y.%m.%d')-beta"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Generated version: $VERSION"
+      
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y \
+            flatpak \
+            flatpak-builder \
+            appstream-util \
+            desktop-file-utils \
+            python3 \
+            python3-gi \
+            gir1.2-gtk-4.0
+      
+      - name: Add Flatseal remote
+        run: |
+          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
+      
+      - name: Build Flatpak
+        run: |
+          flatpak-builder --repo=repo \
+            --force-clean \
+            --ccache \
+            build-dir \
+            com.github.tromshusky.bigscreenLauncher.json
+      
+      - name: Create Flatpak bundle
+        run: |
+          flatpak build-bundle repo \
+            bigscreen-launcher-${{ steps.version.outputs.version }}.flatpak \
+            com.github.tromshusky.bigscreenLauncher
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: BigScreen Launcher ${{ steps.version.outputs.version }}
+          prerelease: true
+          body: |
+            ## Beta Release
+            
+            Built from commit: ${{ github.sha }}
+            
+            ### Installation
+            
+            ```bash
+            flatpak install bigscreen-launcher-${{ steps.version.outputs.version }}.flatpak
+            ```
+            
+            Or use the flatpak file directly:
+            ```bash
+            flatpak install --bundle bigscreen-launcher-${{ steps.version.outputs.version }}.flatpak
+            ```
+            
+            ### Running
+            
+            ```bash
+            flatpak run com.github.tromshusky.bigscreenLauncher
+            ```
+            
+            ### What's Included
+            - Latest development build
+            - Built from main branch
+            - For testing purposes
+          files: |
+            bigscreen-launcher-${{ steps.version.outputs.version }}.flatpak
