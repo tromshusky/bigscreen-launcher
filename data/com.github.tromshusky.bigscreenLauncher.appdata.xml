@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="application">
+  <id>com.github.tromshusky.bigscreenLauncher</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Unlicense</project_license>
+  <name>BigScreen Launcher</name>
+  <summary>A flatpak app selector meant for TV screens</summary>
+  <description>
+    <p>
+      BigScreen Launcher is a GTK4 application designed for HTPC (Home Theater PC) environments.
+      It displays installed Flatpak applications in a horizontal scrollable grid with full
+      controller and keyboard support.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Horizontal scrolling grid layout optimized for TV screens</li>
+      <li>Full gamepad/controller support (D-Pad navigation, A/B buttons)</li>
+      <li>Keyboard navigation (Arrow keys, Enter, Escape)</li>
+      <li>Real-time digital clock display</li>
+      <li>Configurable grid dimensions and scrolling modes</li>
+      <li>Steam integration with Big Picture and PC modes</li>
+      <li>Settings persistence across sessions</li>
+    </ul>
+  </description>
+  <url type="homepage">https://github.com/tromshusky/bigscreen-launcher</url>
+  <url type="bugtracker">https://github.com/tromshusky/bigscreen-launcher/issues</url>
+  <url type="help">https://github.com/tromshusky/bigscreen-launcher</url>
+  <developer id="com.github.tromshusky">
+    <name>tromshusky</name>
+  </developer>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="2026.09.10-beta" date="2026-09-10">
+      <description>
+        <p>Initial beta release with core functionality</p>
+      </description>
+    </release>
+  </releases>
+</component>
