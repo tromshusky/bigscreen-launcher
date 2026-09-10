@@ -35,16 +35,16 @@ jobs:
             python3-gi \
             gir1.2-gtk-4.0
       
-      - name: Add Flathub remote
+      - name: Add Flathub remote as user
         run: |
-          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo || true
       
       - name: Build Flatpak
         run: |
           flatpak-builder \
             --repo=repo \
             --force-clean \
-            --ccache \
+            --user \
             --install-deps-from=flathub \
             build-dir \
             com.github.tromshusky.bigscreenLauncher.json
