@@ -1,8 +1,11 @@
 {
   "app-id": "com.github.tromshusky.bigscreenLauncher",
   "runtime": "org.gnome.Platform",
-  "runtime-version": "46",
+  "runtime-version": "50",
   "sdk": "org.gnome.Sdk",
+  "sdk-extensions": [
+    "org.gnome.Sdk.Locale"
+  ],
   "command": "bigscreen-launcher",
   "finish-args": [
     "--share=network",
@@ -14,6 +17,15 @@
     "--talk-name=org.freedesktop.portal.Desktop",
     "--filesystem=host"
   ],
+  "add-extensions": {
+    "org.freedesktop.Platform.GL.default": {
+      "version": "26.08",
+      "directory": "lib/GL",
+      "version-filename": "glvnd_version.txt",
+      "no-autodownload": false,
+      "autodelete": false
+    }
+  },
   "modules": [
     {
       "name": "bigscreen-launcher",
