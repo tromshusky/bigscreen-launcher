@@ -73,6 +73,7 @@ A GTK4 application designed for HTPC (Home Theater PC) environments that display
 - Launch using `flatpak run <app-id>`
 - Proper handling of application lifecycle
 - Return focus to launcher after app closes (if applicable)
+- Capture Super key (keyboard) or Home (controller) to bring launcher to the foreground within launched applications
 
 ### Technical Requirements
 
@@ -82,14 +83,13 @@ A GTK4 application designed for HTPC (Home Theater PC) environments that display
 
 #### Desktop File Parsing
 - Parse `.desktop` files from `/var/lib/flatpak/exports/share/applications/`
-- Extract: Name, Icon, Exec fields
-- Support for both local icons and icon theme lookups
+- Extract: Name, Icon, Exec fields (multiple if applicable)
 
 #### Distribution
 - Packaged as Flatpak
 - Org ID: `com.github.tromshusky.bigscreenLauncher`
 - Permissions: File system access to Flatpak directories, D-Bus for launching apps
-- Fallback to bundled or system icons
+- Fallback to single letter icons in different colors 
 
 ## User Experience Goals
 - Simple, distraction-free interface optimized for distance viewing
