@@ -17,15 +17,6 @@
     "--talk-name=org.freedesktop.portal.Desktop",
     "--filesystem=host"
   ],
-  "add-extensions": {
-    "org.freedesktop.Platform.GL.default": {
-      "version": "26.08",
-      "directory": "lib/GL",
-      "version-filename": "glvnd_version.txt",
-      "no-autodownload": false,
-      "autodelete": false
-    }
-  },
   "modules": [
     {
       "name": "bigscreen-launcher",
