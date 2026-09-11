@@ -25,6 +25,30 @@ Both implementations read the same `~/.config/bigscreen-launcher/settings.json`
 config format and scan the same Flatpak `.desktop` directories, so switching
 between them doesn't lose settings.
 
+### Sandbox notes (Rust and Python implementations)
+- Both implementations read Flatpak exports through
+  `$XDG_DATA_HOME/flatpak/exports/...` (user installs) and
+  `/var/lib/flatpak/exports/...` (system installs), granted via
+  `--filesystem=xdg-data/flatpak:ro` and
+  `--filesystem=/var/lib/flatpak/exports/share:ro`. Real `$HOME` is
+  intentionally *not* exposed.
+- Launching apps and querying `flatpak list` goes through
+  `flatpak-spawn --host flatpak ...`, since the sandbox has no
+  `flatpak` binary of its own. This requires
+  `--talk-name=org.freedesktop.Flatpak`.
+- Icons are resolved via the system icon theme, with the Flatpak
+  export icon directories added as extra search paths. If an app's
+  icon can't be resolved, a colored letter avatar is shown instead
+  (per the fallback requirement above).
+
+### Known gaps (Rust implementation)
+- The Settings popover persists `grid_columns` / `steam_launch_mode` /
+  `scrolling_mode` to `settings.json`, but changing `grid_columns` at
+  runtime does not yet resize the visible row — it takes effect on the
+  next launch. Live re-layout is still TODO.
+- Gamepad/controller input is stubbed (same as the Python side) —
+  only keyboard input is wired up.
+
 ### Known gaps (both implementations)
 - Gamepad/controller input is stubbed — only keyboard input (arrows,
   Enter, Escape, Super) is wired up. Controller support needs an

@@ -12,14 +12,14 @@
   },
   "command": "bigscreen-launcher",
   "finish-args": [
-    "--share=network",
     "--share=ipc",
     "--socket=fallback-x11",
     "--socket=wayland",
     "--device=dri",
-    "--system-talk-name=org.freedesktop.Flatpak",
+    "--talk-name=org.freedesktop.Flatpak",
     "--talk-name=org.freedesktop.portal.Desktop",
-    "--filesystem=host"
+    "--filesystem=xdg-data/flatpak:ro",
+    "--filesystem=/var/lib/flatpak/exports/share:ro"
   ],
   "modules": [
     {
@@ -36,10 +36,7 @@
         "install -Dm755 /dev/stdin /app/bin/bigscreen-launcher << 'EOF'\n#!/usr/bin/env python3\nimport sys\nimport os\n\ndef main():\n    args = sys.argv[1:]\n    if '--rust' in args:\n        rust_args = [a for a in args if a != '--rust']\n        os.execv('/app/bin/bigscreen-launcher-rs', ['/app/bin/bigscreen-launcher-rs'] + rust_args)\n    sys.path.insert(0, '/app/lib/python3.11/site-packages')\n    from main import main as py_main\n    sys.exit(py_main())\n\nif __name__ == '__main__':\n    main()\nEOF"
       ],
       "sources": [
-        {
-          "type": "dir",
-          "path": "."
-        }
+        { "type": "dir", "path": "." }
       ]
     },
     {
@@ -53,10 +50,7 @@
         "install -Dm755 rust/target/release/bigscreen-launcher-rs /app/bin/bigscreen-launcher-rs"
       ],
       "sources": [
-        {
-          "type": "dir",
-          "path": "."
-        }
+        { "type": "dir", "path": "." }
       ]
     }
   ]
