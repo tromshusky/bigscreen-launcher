@@ -4,8 +4,12 @@
   "runtime-version": "50",
   "sdk": "org.gnome.Sdk",
   "sdk-extensions": [
-    "org.gnome.Sdk.Locale"
+    "org.gnome.Sdk.Locale",
+    "org.freedesktop.Sdk.Extension.rust-stable"
   ],
+  "build-options": {
+    "append-path": "/usr/lib/sdk/rust-stable/bin"
+  },
   "command": "bigscreen-launcher",
   "finish-args": [
     "--share=network",
@@ -29,7 +33,24 @@
         "cp data/icons/com.github.tromshusky.bigscreenLauncher.svg /app/share/icons/hicolor/scalable/apps/ || true",
         "mkdir -p /app/share/applications",
         "cp data/com.github.tromshusky.bigscreenLauncher.desktop /app/share/applications/ || true",
-        "install -Dm755 /dev/stdin /app/bin/bigscreen-launcher << 'EOF'\n#!/usr/bin/env python3\nimport sys\nsys.path.insert(0, '/app/lib/python3.11/site-packages')\nfrom main import main\nif __name__ == '__main__':\n    sys.exit(main())\nEOF"
+        "install -Dm755 /dev/stdin /app/bin/bigscreen-launcher << 'EOF'\n#!/usr/bin/env python3\nimport sys\nimport os\n\ndef main():\n    args = sys.argv[1:]\n    if '--rust' in args:\n        rust_args = [a for a in args if a != '--rust']\n        os.execv('/app/bin/bigscreen-launcher-rs', ['/app/bin/bigscreen-launcher-rs'] + rust_args)\n    sys.path.insert(0, '/app/lib/python3.11/site-packages')\n    from main import main as py_main\n    sys.exit(py_main())\n\nif __name__ == '__main__':\n    main()\nEOF"
+      ],
+      "sources": [
+        {
+          "type": "dir",
+          "path": "."
+        }
+      ]
+    },
+    {
+      "name": "bigscreen-launcher-rust",
+      "buildsystem": "simple",
+      "build-options": {
+        "build-args": ["--share=network"]
+      },
+      "build-commands": [
+        "cargo build --release --manifest-path=rust/Cargo.toml",
+        "install -Dm755 rust/target/release/bigscreen-launcher-rs /app/bin/bigscreen-launcher-rs"
       ],
       "sources": [
         {

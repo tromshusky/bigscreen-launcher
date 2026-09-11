@@ -3,6 +3,37 @@
 ## Overview
 A GTK4 application designed for HTPC (Home Theater PC) environments that displays installed Flatpak applications in a horizontal scrollable grid with full controller and keyboard support.
 
+## Implementations
+
+This repo ships two implementations of the same specification, both built
+by the same Flatpak manifest:
+
+- **Python / PyGObject** (default, `src/`) — the original reference
+  implementation.
+- **Rust / gtk4-rs** (`rust/`) — a from-scratch implementation of the same
+  UI and behavior. Launch it with:
+
+```bash
+  flatpak run com.github.tromshusky.bigscreenLauncher -- --rust
+```
+
+  The installed `bigscreen-launcher` command is a thin dispatcher: it
+  detects `--rust` and `exec`s `/app/bin/bigscreen-launcher-rs` instead of
+  starting the Python app.
+
+Both implementations read the same `~/.config/bigscreen-launcher/settings.json`
+config format and scan the same Flatpak `.desktop` directories, so switching
+between them doesn't lose settings.
+
+### Known gaps (both implementations)
+- Gamepad/controller input is stubbed — only keyboard input (arrows,
+  Enter, Escape, Super) is wired up. Controller support needs an
+  external crate/library (`python-evdev`/`pygame` for Python, `gilrs`
+  for Rust) polled on a timer.
+- The Settings menu is a placeholder; grid size, Steam launch mode, and
+  scrolling mode are read from config but not yet editable in-app.
+- Multi-row grids (`grid_rows` > 1) are accepted in config but not yet
+  rendered — both UIs currently render a single scrolling row.
 ## Core Features
 
 ### Application Display
@@ -79,7 +110,8 @@ A GTK4 application designed for HTPC (Home Theater PC) environments that display
 
 #### Framework
 - GTK 4.0 or higher
-- Python 3.8+ with PyGObject
+- Python 3.8+ with PyGObject (`src/`), **or**
+- Rust 1.75+ with gtk4-rs 0.9 (`rust/`)
 
 #### Desktop File Parsing
 - Parse `.desktop` files from `/var/lib/flatpak/exports/share/applications/`
