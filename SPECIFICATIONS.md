@@ -42,12 +42,14 @@ between them doesn't lose settings.
   (per the fallback requirement above).
 
 ### Known gaps (Rust implementation)
-- The Settings popover persists `grid_columns` / `steam_launch_mode` /
-  `scrolling_mode` to `settings.json`, but changing `grid_columns` at
-  runtime does not yet resize the visible row — it takes effect on the
-  next launch. Live re-layout is still TODO.
-- Gamepad/controller input is stubbed (same as the Python side) —
-  only keyboard input is wired up.
+- Settings is now a full-window Kodi-style page (not a popover), and
+  applies grid-column changes immediately.
+- Focus model for Up/Down is currently a single row (Grid ⇄ Settings
+  tile). If `grid_rows` > 1 is implemented, Up/Down will need real 2D
+  grid navigation instead of this simple two-state toggle.
+- Tile sizing is computed once from the primary monitor's geometry at
+  startup; it does not yet respond to live window/monitor resizes.
+- Gamepad/controller input is still stubbed — keyboard only.
 
 ### Known gaps (both implementations)
 - Gamepad/controller input is stubbed — only keyboard input (arrows,
@@ -58,6 +60,7 @@ between them doesn't lose settings.
   scrolling mode are read from config but not yet editable in-app.
 - Multi-row grids (`grid_rows` > 1) are accepted in config but not yet
   rendered — both UIs currently render a single scrolling row.
+  
 ## Core Features
 
 ### Application Display

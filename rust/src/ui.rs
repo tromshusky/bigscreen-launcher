@@ -2,7 +2,8 @@ use gtk4::prelude::*;
 use gtk4::{gdk, glib};
 use gtk4::{
     Adjustment, Align, ApplicationWindow, Box as GtkBox, Button, ComboBoxText, CssProvider,
-    Image, Justification, Label, Orientation, Popover, PolicyType, ScrolledWindow, SpinButton,
+    Image, Justification, Label, Orientation, PolicyType, ScrolledWindow, SpinButton, Stack,
+    StackTransitionType,
 };
 use std::cell::{Cell, RefCell};
 use std::process::{Command, Stdio};
@@ -12,7 +13,6 @@ use crate::config::Config;
 use crate::flatpak_scanner::{FlatpakApp, FlatpakScanner};
 use crate::input_handler::{map_keyval, InputAction};
 
-// Eye-friendly dark palette instead of the GTK default white background.
 const STYLE_CSS: &str = "
 window {
     background-color: #1e1f29;
@@ -20,27 +20,55 @@ window {
 label {
     color: #e6e6ec;
 }
-button.bigscreen-item {
-    background-color: #2a2b3a;
-    border: none;
-    border-radius: 16px;
-    padding: 0;
-    transition: border-color 120ms ease, background-color 120ms ease;
+
+/* Header */
+.clock-time {
+    color: #f2f2f6;
+    font-size: 40px;
+    font-weight: 800;
 }
-button.bigscreen-item:hover {
-    background-color: #34364a;
+.clock-date {
+    color: #9a9ab0;
+    font-size: 20px;
+    font-weight: 400;
+}
+
+/* App tiles and settings tile share the same card look */
+button.bigscreen-item {
+    background-color: transparent;
+    border: 4px solid transparent;
+    border-radius: 20px;
+    padding: 8px;
+    transition: border-color 120ms ease;
 }
 button.bigscreen-item.selected {
-    border: 4px solid #7aa2f7;
+    border-color: #7aa2f7;
 }
-.app-avatar {
-    border-radius: 20px;
-    min-width: 128px;
-    min-height: 128px;
+.app-name {
+    color: #e6e6ec;
+    font-size: 18px;
+    margin-top: 8px;
 }
-.app-avatar label {
+
+/* Light 'card' behind icons/glyphs for contrast, separate from the label */
+.icon-card {
+    background-color: #f2f2f2;
+    border-radius: 18px;
+    min-width: 160px;
+    min-height: 160px;
+}
+.icon-card.settings-card {
+    background-color: #33344a;
+}
+.icon-card.settings-card image {
+    color: #e6e6ec;
+    -gtk-icon-size: 72px;
+}
+
+/* Letter-avatar fallback */
+.avatar-label {
     color: #ffffff;
-    font-size: 42px;
+    font-size: 56px;
     font-weight: bold;
 }
 .avatar-color-0 { background-color: #e07a5f; }
@@ -51,23 +79,47 @@ button.bigscreen-item.selected {
 .avatar-color-5 { background-color: #457b9d; }
 .avatar-color-6 { background-color: #6d6875; }
 .avatar-color-7 { background-color: #ef8354; }
-.settings-popover-box label {
-    color: #1e1f29;
+
+/* Kodi-style full-window settings page */
+.settings-page {
+    background-color: #1e1f29;
+}
+.settings-page label {
+    color: #e6e6ec;
+    font-size: 22px;
+}
+.settings-heading {
+    font-size: 32px;
+    font-weight: 800;
+    margin-bottom: 20px;
+}
+.settings-page button {
+    font-size: 20px;
+    padding: 10px 18px;
 }
 ";
 
 const AVATAR_COLORS: usize = 8;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FocusTarget {
+    Grid,
+    SettingsTile,
+}
+
 pub struct MainWindow {
     pub window: ApplicationWindow,
+    stack: Stack,
     items_box: GtkBox,
-    clock_label: Label,
+    settings_button: Button,
+    clock_time_label: Label,
+    clock_date_label: Label,
     config: RefCell<Config>,
     scanner: RefCell<FlatpakScanner>,
     apps: RefCell<Vec<FlatpakApp>>,
     buttons: RefCell<Vec<Button>>,
     selected: Cell<usize>,
-    settings_popover: RefCell<Option<Popover>>,
+    focus: Cell<FocusTarget>,
 }
 
 impl MainWindow {
@@ -87,9 +139,6 @@ impl MainWindow {
                 &provider,
                 gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
             );
-
-            // Other apps' exported icons aren't in the sandbox's default
-            // icon search path — add them explicitly.
             let icon_theme = gtk4::IconTheme::for_display(&display);
             for path in FlatpakScanner::icon_search_paths() {
                 if path.exists() {
@@ -98,34 +147,48 @@ impl MainWindow {
             }
         }
 
-        let main_box = GtkBox::new(Orientation::Vertical, 20);
-        main_box.set_margin_start(20);
-        main_box.set_margin_end(20);
-        main_box.set_margin_top(20);
-        main_box.set_margin_bottom(20);
+        // --- Main page ---
+        let main_page = GtkBox::new(Orientation::Vertical, 24);
+        main_page.set_margin_start(32);
+        main_page.set_margin_end(32);
+        main_page.set_margin_top(24);
+        main_page.set_margin_bottom(32);
 
-        // Header: clock top-left, settings wheel top-right (per spec —
-        // no app title bar in the design).
+        // Header: big clock (time + date subtitle) top-left, large settings tile top-right
         let header_box = GtkBox::new(Orientation::Horizontal, 20);
         header_box.set_hexpand(true);
 
-        let clock_label = Label::new(None);
-        clock_label.set_halign(Align::Start);
-        clock_label.set_markup("<span size='large'></span>");
-        header_box.append(&clock_label);
+        let clock_box = GtkBox::new(Orientation::Vertical, 2);
+        clock_box.set_valign(Align::Start);
+        let clock_time_label = Label::new(None);
+        clock_time_label.add_css_class("clock-time");
+        clock_time_label.set_halign(Align::Start);
+        let clock_date_label = Label::new(None);
+        clock_date_label.add_css_class("clock-date");
+        clock_date_label.set_halign(Align::Start);
+        clock_box.append(&clock_time_label);
+        clock_box.append(&clock_date_label);
+        header_box.append(&clock_box);
 
         let spacer = GtkBox::new(Orientation::Horizontal, 0);
         spacer.set_hexpand(true);
         header_box.append(&spacer);
 
-        let settings_button = Button::from_icon_name("emblem-system-symbolic");
-        settings_button.add_css_class("flat");
-        settings_button.set_tooltip_text(Some("Settings"));
+        let settings_button = Self::build_tile_button(
+            "settings-icon-card",
+            |card| {
+                card.add_css_class("settings-card");
+                let icon = Image::from_icon_name("emblem-system-symbolic");
+                icon.set_pixel_size(72);
+                card.append(&icon);
+            },
+            Some("Settings"),
+        );
         header_box.append(&settings_button);
 
-        main_box.append(&header_box);
+        main_page.append(&header_box);
 
-        // Horizontally scrolling strip of apps.
+        // Horizontally scrolling strip of apps
         let items_box = GtkBox::new(Orientation::Horizontal, 20);
         items_box.set_valign(Align::Center);
 
@@ -134,45 +197,119 @@ impl MainWindow {
         scroller.set_vexpand(true);
         scroller.set_child(Some(&items_box));
 
-        main_box.append(&scroller);
-        window.set_child(Some(&main_box));
+        main_page.append(&scroller);
+
+        // --- Stack: main page <-> full-window settings page ---
+        let stack = Stack::new();
+        stack.set_transition_type(StackTransitionType::SlideUpDown);
+        stack.add_named(&main_page, Some("main"));
+        window.set_child(Some(&stack));
 
         let win = Rc::new(MainWindow {
             window: window.clone(),
+            stack: stack.clone(),
             items_box,
-            clock_label,
+            settings_button: settings_button.clone(),
+            clock_time_label,
+            clock_date_label,
             config: RefCell::new(config),
             scanner: RefCell::new(scanner),
             apps: RefCell::new(Vec::new()),
             buttons: RefCell::new(Vec::new()),
             selected: Cell::new(0),
-            settings_popover: RefCell::new(None),
+            focus: Cell::new(FocusTarget::Grid),
         });
+
+        let settings_page = win.build_settings_page();
+        stack.add_named(&settings_page, Some("settings"));
 
         win.setup_input_handlers();
         win.refresh_apps();
         win.update_clock();
 
-        let popover = win.build_settings_popover(&settings_button);
-        *win.settings_popover.borrow_mut() = Some(popover);
-
         {
             let win_clone = win.clone();
-            settings_button.connect_clicked(move |_| win_clone.show_settings());
+            settings_button.connect_clicked(move |_| win_clone.open_settings());
         }
 
         {
             let win_clone = win.clone();
-            glib::timeout_add_seconds_local(1, move || {
+            glib::timeout_add_seconds_local(60, move || {
                 win_clone.update_clock();
                 glib::ControlFlow::Continue
             });
         }
+        win.update_clock();
 
         window.present();
         window.fullscreen();
 
+        // Size app tiles to the real monitor width once the window is up,
+        // so exactly `grid_columns` tiles are visible instead of "as many
+        // as fit at 200px".
+        {
+            let win_clone = win.clone();
+            glib::idle_add_local_once(move || win_clone.apply_tile_sizing());
+        }
+
         win
+    }
+
+    /// Builds a card-style tile button (used for both app icons and the
+    /// settings tile) so they share sizing/selection visuals.
+    fn build_tile_button(
+        card_extra_class: &str,
+        populate_card: impl FnOnce(&GtkBox),
+        label_text: Option<&str>,
+    ) -> Button {
+        let button = Button::new();
+        button.add_css_class("bigscreen-item");
+
+        let outer = GtkBox::new(Orientation::Vertical, 0);
+        outer.set_halign(Align::Center);
+        outer.set_valign(Align::Center);
+
+        let card = GtkBox::new(Orientation::Vertical, 0);
+        card.add_css_class("icon-card");
+        card.add_css_class(card_extra_class);
+        card.set_halign(Align::Center);
+        card.set_valign(Align::Center);
+        populate_card(&card);
+        outer.append(&card);
+
+        if let Some(text) = label_text {
+            let label = Label::new(Some(text));
+            label.add_css_class("app-name");
+            label.set_wrap(true);
+            label.set_justify(Justification::Center);
+            outer.append(&label);
+        }
+
+        button.set_child(Some(&outer));
+        button
+    }
+
+    /// Sizes app tiles so exactly `grid_columns` are visible on the
+    /// primary monitor. This runs once at startup; live resizing across
+    /// monitor/window changes is a known gap (see SPECIFICATIONS.md).
+    fn apply_tile_sizing(self: &Rc<Self>) {
+        let columns = self.config.borrow().grid_columns.max(1) as f64;
+        let monitor_width = gdk::Display::default()
+            .and_then(|d| d.monitors().item(0))
+            .and_then(|obj| obj.downcast::<gdk::Monitor>().ok())
+            .map(|m| m.geometry().width() as f64)
+            .unwrap_or(1920.0);
+
+        let outer_margins = 64.0; // main_page left+right margins
+        let spacing = 20.0;
+        let usable = monitor_width - outer_margins;
+        let tile_width = ((usable - spacing * (columns - 1.0)) / columns).max(120.0);
+
+        for button in self.buttons.borrow().iter() {
+            button.set_size_request(tile_width as i32, tile_width as i32 + 60);
+        }
+        self.settings_button
+            .set_size_request(tile_width as i32, tile_width as i32);
     }
 
     fn setup_input_handlers(self: &Rc<Self>) {
@@ -190,12 +327,23 @@ impl MainWindow {
     }
 
     fn handle_action(self: &Rc<Self>, action: InputAction) {
+        // While the settings page is showing, Escape/B returns to main;
+        // other navigation is left to the settings widgets themselves.
+        if self.stack.visible_child_name().as_deref() == Some("settings") {
+            if action == InputAction::Back {
+                self.close_settings();
+            }
+            return;
+        }
+
         match action {
             InputAction::Left => self.navigate(-1),
             InputAction::Right => self.navigate(1),
-            InputAction::Activate => self.activate_selected(),
+            InputAction::Up => self.focus_settings_tile(),
+            InputAction::Down => self.focus_grid(),
+            InputAction::Activate => self.activate_focused(),
             InputAction::Back => self.on_back(),
-            InputAction::Settings => self.show_settings(),
+            InputAction::Settings => self.open_settings(),
         }
     }
 
@@ -214,30 +362,17 @@ impl MainWindow {
         *self.apps.borrow_mut() = apps;
 
         self.selected.set(0);
-        self.update_selection(None);
+        self.focus.set(FocusTarget::Grid);
+        self.update_selection_visuals();
     }
 
     fn create_app_button(self: &Rc<Self>, app: &FlatpakApp) -> Button {
-        let button = Button::new();
-        button.set_size_request(200, 200);
-        button.add_css_class("bigscreen-item");
-
-        let box_ = GtkBox::new(Orientation::Vertical, 10);
-        box_.set_margin_start(10);
-        box_.set_margin_end(10);
-        box_.set_margin_top(10);
-        box_.set_margin_bottom(10);
-        box_.set_valign(Align::Center);
-        box_.set_halign(Align::Center);
-
-        box_.append(&self.create_app_icon(app));
-
-        let name_label = Label::new(Some(&app.name));
-        name_label.set_wrap(true);
-        name_label.set_justify(Justification::Center);
-        box_.append(&name_label);
-
-        button.set_child(Some(&box_));
+        let icon_source = self.resolve_icon_widget(app);
+        let button = Self::build_tile_button(
+            "app-icon-card",
+            move |card| card.append(&icon_source),
+            Some(&app.name),
+        );
 
         let app_id = app.app_id.clone();
         let win = self.clone();
@@ -246,23 +381,23 @@ impl MainWindow {
         button
     }
 
-    /// Uses the real icon if the icon theme can resolve it; otherwise
-    /// falls back to a colored letter avatar, per spec.
-    fn create_app_icon(&self, app: &FlatpakApp) -> gtk4::Widget {
+    /// Real icon if the icon theme can resolve it; letter avatar only as
+    /// a fallback, kept visually distinct in its own light/dark card.
+    fn resolve_icon_widget(&self, app: &FlatpakApp) -> gtk4::Widget {
         if !app.icon.is_empty() {
             if let Some(display) = gdk::Display::default() {
                 let theme = gtk4::IconTheme::for_display(&display);
                 if theme.has_icon(&app.icon) {
                     let image = Image::from_icon_name(&app.icon);
-                    image.set_pixel_size(128);
+                    image.set_pixel_size(112);
                     return image.upcast();
                 }
             }
         }
-        Self::create_letter_avatar(&app.name)
+        Self::letter_avatar(&app.name)
     }
 
-    fn create_letter_avatar(name: &str) -> gtk4::Widget {
+    fn letter_avatar(name: &str) -> gtk4::Widget {
         let letter = name
             .chars()
             .next()
@@ -276,56 +411,73 @@ impl MainWindow {
         let color_index = (hash as usize) % AVATAR_COLORS;
 
         let avatar = GtkBox::new(Orientation::Vertical, 0);
-        avatar.set_size_request(128, 128);
+        avatar.add_css_class(&format!("avatar-color-{color_index}"));
         avatar.set_halign(Align::Center);
         avatar.set_valign(Align::Center);
-        avatar.add_css_class("app-avatar");
-        avatar.add_css_class(&format!("avatar-color-{color_index}"));
+        avatar.set_size_request(112, 112);
 
         let label = Label::new(Some(&letter));
-        label.set_halign(Align::Center);
-        label.set_valign(Align::Center);
+        label.add_css_class("avatar-label");
         avatar.append(&label);
 
         avatar.upcast()
     }
 
     fn navigate(self: &Rc<Self>, delta: i32) {
+        if self.focus.get() != FocusTarget::Grid {
+            return;
+        }
         let len = self.buttons.borrow().len();
         if len == 0 {
             return;
         }
         let current = self.selected.get() as i32;
         let next = (current + delta).clamp(0, len as i32 - 1) as usize;
-        if next != self.selected.get() {
-            let previous = self.selected.get();
-            self.selected.set(next);
-            self.update_selection(Some(previous));
-        }
+        self.selected.set(next);
+        self.update_selection_visuals();
     }
 
-    fn update_selection(self: &Rc<Self>, previous: Option<usize>) {
+    fn focus_settings_tile(self: &Rc<Self>) {
+        self.focus.set(FocusTarget::SettingsTile);
+        self.update_selection_visuals();
+    }
+
+    fn focus_grid(self: &Rc<Self>) {
+        self.focus.set(FocusTarget::Grid);
+        self.update_selection_visuals();
+    }
+
+    fn update_selection_visuals(self: &Rc<Self>) {
         let buttons = self.buttons.borrow();
-        if let Some(prev) = previous {
-            if let Some(btn) = buttons.get(prev) {
+        for (i, btn) in buttons.iter().enumerate() {
+            let should_select = self.focus.get() == FocusTarget::Grid && i == self.selected.get();
+            if should_select {
+                btn.add_css_class("selected");
+                btn.grab_focus();
+            } else {
                 btn.remove_css_class("selected");
             }
         }
-        if let Some(btn) = buttons.get(self.selected.get()) {
-            btn.add_css_class("selected");
-            btn.grab_focus();
+        if self.focus.get() == FocusTarget::SettingsTile {
+            self.settings_button.add_css_class("selected");
+            self.settings_button.grab_focus();
+        } else {
+            self.settings_button.remove_css_class("selected");
         }
     }
 
-    fn activate_selected(self: &Rc<Self>) {
-        let idx = self.selected.get();
-        if let Some(app) = self.apps.borrow().get(idx) {
-            self.launch(&app.app_id);
+    fn activate_focused(self: &Rc<Self>) {
+        match self.focus.get() {
+            FocusTarget::Grid => {
+                let idx = self.selected.get();
+                if let Some(app) = self.apps.borrow().get(idx) {
+                    self.launch(&app.app_id);
+                }
+            }
+            FocusTarget::SettingsTile => self.open_settings(),
         }
     }
 
-    /// Launches via flatpak-spawn --host, since the sandboxed app has
-    /// no `flatpak` binary of its own to call directly.
     fn launch(self: &Rc<Self>, app_id: &str) {
         if let Some(app) = self.scanner.borrow().get_app_by_id(app_id) {
             match Command::new("flatpak-spawn")
@@ -341,70 +493,73 @@ impl MainWindow {
     }
 
     fn on_back(self: &Rc<Self>) {
-        // Reserved for closing an overlay / exiting settings.
-        if let Some(p) = self.settings_popover.borrow().as_ref() {
-            p.popdown();
-        }
+        // Reserved for future overlay/back-navigation within the grid.
     }
 
-    fn show_settings(self: &Rc<Self>) {
-        if let Some(p) = self.settings_popover.borrow().as_ref() {
-            p.popup();
-        }
+    fn open_settings(self: &Rc<Self>) {
+        self.stack.set_visible_child_name("settings");
     }
 
-    /// Builds the (now functional) settings popover: grid columns,
-    /// Steam launch mode, and scrolling mode, persisted to config.json.
-    fn build_settings_popover(self: &Rc<Self>, parent: &Button) -> Popover {
-        let popover = Popover::new();
-        popover.set_parent(parent);
+    fn close_settings(self: &Rc<Self>) {
+        self.stack.set_visible_child_name("main");
+        self.focus.set(FocusTarget::SettingsTile);
+        self.update_selection_visuals();
+    }
 
-        let content = GtkBox::new(Orientation::Vertical, 12);
-        content.add_css_class("settings-popover-box");
-        content.set_margin_top(12);
-        content.set_margin_bottom(12);
-        content.set_margin_start(12);
-        content.set_margin_end(12);
+    /// Kodi-style settings: a full page that replaces the whole window
+    /// content, rather than a small popover.
+    fn build_settings_page(self: &Rc<Self>) -> GtkBox {
+        let page = GtkBox::new(Orientation::Vertical, 20);
+        page.add_css_class("settings-page");
+        page.set_margin_start(48);
+        page.set_margin_end(48);
+        page.set_margin_top(40);
+        page.set_margin_bottom(40);
 
-        let heading = Label::new(None);
-        heading.set_markup("<b>Settings</b>");
+        let heading = Label::new(Some("Settings"));
+        heading.add_css_class("settings-heading");
         heading.set_halign(Align::Start);
-        content.append(&heading);
+        page.append(&heading);
 
         let cfg = self.config.borrow().clone();
 
-        let columns_row = GtkBox::new(Orientation::Horizontal, 8);
+        let columns_row = GtkBox::new(Orientation::Horizontal, 16);
         columns_row.append(&Label::new(Some("Visible columns")));
         let columns_adjustment = Adjustment::new(cfg.grid_columns as f64, 1.0, 8.0, 1.0, 1.0, 0.0);
         let columns_spin = SpinButton::new(Some(&columns_adjustment), 1.0, 0);
         columns_row.append(&columns_spin);
-        content.append(&columns_row);
+        page.append(&columns_row);
 
-        let steam_row = GtkBox::new(Orientation::Horizontal, 8);
+        let steam_row = GtkBox::new(Orientation::Horizontal, 16);
         steam_row.append(&Label::new(Some("Steam launch mode")));
         let steam_combo = ComboBoxText::new();
         steam_combo.append(Some("bigpicture"), "Big Picture");
         steam_combo.append(Some("pc"), "PC Mode");
         steam_combo.set_active_id(Some(&cfg.steam_launch_mode));
         steam_row.append(&steam_combo);
-        content.append(&steam_row);
+        page.append(&steam_row);
 
-        let scroll_row = GtkBox::new(Orientation::Horizontal, 8);
+        let scroll_row = GtkBox::new(Orientation::Horizontal, 16);
         scroll_row.append(&Label::new(Some("Scrolling mode")));
         let scroll_combo = ComboBoxText::new();
         scroll_combo.append(Some("continuous"), "Continuous");
         scroll_combo.append(Some("pages"), "Pages");
         scroll_combo.set_active_id(Some(&cfg.scrolling_mode));
         scroll_row.append(&scroll_combo);
-        content.append(&scroll_row);
+        page.append(&scroll_row);
 
+        let spacer = GtkBox::new(Orientation::Vertical, 0);
+        spacer.set_vexpand(true);
+        page.append(&spacer);
+
+        let button_row = GtkBox::new(Orientation::Horizontal, 16);
         let save_button = Button::with_label("Save");
-        content.append(&save_button);
-
-        popover.set_child(Some(&content));
+        let back_button = Button::with_label("Back");
+        button_row.append(&save_button);
+        button_row.append(&back_button);
+        page.append(&button_row);
 
         let win = self.clone();
-        let popover_for_save = popover.clone();
         save_button.connect_clicked(move |_| {
             {
                 let mut cfg = win.config.borrow_mut();
@@ -417,17 +572,22 @@ impl MainWindow {
                 }
                 cfg.save();
             }
-            popover_for_save.popdown();
+            win.apply_tile_sizing();
+            win.close_settings();
         });
 
-        popover
+        let win_back = self.clone();
+        back_button.connect_clicked(move |_| win_back.close_settings());
+
+        page
     }
 
     fn update_clock(self: &Rc<Self>) {
         if let Ok(now) = glib::DateTime::now_local() {
             let time_str = now.format("%H:%M").unwrap_or_default();
-            self.clock_label
-                .set_markup(&format!("<span size='large'>{}</span>", time_str));
+            let date_str = now.format("%a, %d %b %Y").unwrap_or_default();
+            self.clock_time_label.set_text(&time_str);
+            self.clock_date_label.set_text(&date_str);
         }
     }
 }
