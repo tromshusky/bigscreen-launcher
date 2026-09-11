@@ -24,16 +24,17 @@ label {
 /* Header */
 .clock-time {
     color: #f2f2f6;
-    font-size: 40px;
+    font-size: 120px;
     font-weight: 800;
+    line-height: 1;
 }
 .clock-date {
     color: #9a9ab0;
-    font-size: 20px;
+    font-size: 40px;
     font-weight: 400;
 }
 
-/* App tiles and settings tile share the same card look */
+/* App tiles and settings tile share the same interaction visuals */
 button.bigscreen-item {
     background-color: transparent;
     border: 4px solid transparent;
@@ -46,26 +47,35 @@ button.bigscreen-item.selected {
 }
 .app-name {
     color: #e6e6ec;
-    font-size: 18px;
-    margin-top: 8px;
+    font-size: 36px;
+    margin-top: 12px;
 }
 
-/* Light 'card' behind icons/glyphs for contrast, separate from the label */
+/* Thin light backdrop card — ONLY used behind real (often-transparent)
+   icons for contrast. Letter avatars do NOT use this; they supply their
+   own single colored box instead, to avoid a double-box look. */
 .icon-card {
     background-color: #f2f2f2;
-    border-radius: 18px;
-    min-width: 160px;
-    min-height: 160px;
+    border-radius: 16px;
+    padding: 12px;
+    min-width: 140px;
+    min-height: 140px;
 }
 .icon-card.settings-card {
     background-color: #33344a;
+    min-width: 0;
+    min-height: 0;
 }
 .icon-card.settings-card image {
     color: #e6e6ec;
-    -gtk-icon-size: 72px;
 }
 
-/* Letter-avatar fallback */
+/* Letter-avatar fallback: single self-contained colored box */
+.avatar-box {
+    border-radius: 16px;
+    min-width: 140px;
+    min-height: 140px;
+}
 .avatar-label {
     color: #ffffff;
     font-size: 56px;
@@ -174,16 +184,19 @@ impl MainWindow {
         spacer.set_hexpand(true);
         header_box.append(&spacer);
 
-        let settings_button = Self::build_tile_button(
-            "settings-icon-card",
-            |card| {
-                card.add_css_class("settings-card");
-                let icon = Image::from_icon_name("emblem-system-symbolic");
-                icon.set_pixel_size(72);
-                card.append(&icon);
-            },
-            Some("Settings"),
-        );
+        let settings_card = GtkBox::new(Orientation::Vertical, 0);
+        settings_card.add_css_class("icon-card");
+        settings_card.add_css_class("settings-card");
+        settings_card.set_halign(Align::Center);
+        settings_card.set_valign(Align::Center);
+        settings_card.set_hexpand(true);
+        settings_card.set_vexpand(true);
+
+        let settings_icon = Image::from_icon_name("emblem-system-symbolic");
+        settings_icon.set_pixel_size(32);
+        settings_card.append(&settings_icon);
+
+        let settings_button = Self::build_tile_button(&settings_card.upcast::<gtk4::Widget>(), None);
         header_box.append(&settings_button);
 
         main_page.append(&header_box);
@@ -255,27 +268,17 @@ impl MainWindow {
         win
     }
 
-    /// Builds a card-style tile button (used for both app icons and the
-    /// settings tile) so they share sizing/selection visuals.
-    fn build_tile_button(
-        card_extra_class: &str,
-        populate_card: impl FnOnce(&GtkBox),
-        label_text: Option<&str>,
-    ) -> Button {
+    /// Builds a card-style tile button. `icon_widget` is placed as-is —
+    /// callers decide whether it needs a light backdrop card (real icons)
+    /// or is already a self-contained box (letter avatars, settings glyph).
+    fn build_tile_button(icon_widget: &gtk4::Widget, label_text: Option<&str>) -> Button {
         let button = Button::new();
         button.add_css_class("bigscreen-item");
 
         let outer = GtkBox::new(Orientation::Vertical, 0);
         outer.set_halign(Align::Center);
         outer.set_valign(Align::Center);
-
-        let card = GtkBox::new(Orientation::Vertical, 0);
-        card.add_css_class("icon-card");
-        card.add_css_class(card_extra_class);
-        card.set_halign(Align::Center);
-        card.set_valign(Align::Center);
-        populate_card(&card);
-        outer.append(&card);
+        outer.append(icon_widget);
 
         if let Some(text) = label_text {
             let label = Label::new(Some(text));
@@ -289,27 +292,30 @@ impl MainWindow {
         button
     }
 
-    /// Sizes app tiles so exactly `grid_columns` are visible on the
-    /// primary monitor. This runs once at startup; live resizing across
-    /// monitor/window changes is a known gap (see SPECIFICATIONS.md).
-    fn apply_tile_sizing(self: &Rc<Self>) {
-        let columns = self.config.borrow().grid_columns.max(1) as f64;
-        let monitor_width = gdk::Display::default()
-            .and_then(|d| d.monitors().item(0))
-            .and_then(|obj| obj.downcast::<gdk::Monitor>().ok())
-            .map(|m| m.geometry().width() as f64)
-            .unwrap_or(1920.0);
+    fn letter_avatar(name: &str) -> gtk4::Widget {
+        let letter = name
+            .chars()
+            .next()
+            .map(|c| c.to_uppercase().to_string())
+            .unwrap_or_else(|| "?".to_string());
 
-        let outer_margins = 64.0; // main_page left+right margins
-        let spacing = 20.0;
-        let usable = monitor_width - outer_margins;
-        let tile_width = ((usable - spacing * (columns - 1.0)) / columns).max(120.0);
-
-        for button in self.buttons.borrow().iter() {
-            button.set_size_request(tile_width as i32, tile_width as i32 + 60);
+        let mut hash: u32 = 0;
+        for b in name.bytes() {
+            hash = hash.wrapping_mul(31).wrapping_add(b as u32);
         }
-        self.settings_button
-            .set_size_request(tile_width as i32, tile_width as i32);
+        let color_index = (hash as usize) % AVATAR_COLORS;
+
+        let avatar = GtkBox::new(Orientation::Vertical, 0);
+        avatar.add_css_class("avatar-box");
+        avatar.add_css_class(&format!("avatar-color-{color_index}"));
+        avatar.set_halign(Align::Center);
+        avatar.set_valign(Align::Center);
+
+        let label = Label::new(Some(&letter));
+        label.add_css_class("avatar-label");
+        avatar.append(&label);
+
+        avatar.upcast()
     }
 
     fn setup_input_handlers(self: &Rc<Self>) {
@@ -367,12 +373,8 @@ impl MainWindow {
     }
 
     fn create_app_button(self: &Rc<Self>, app: &FlatpakApp) -> Button {
-        let icon_source = self.resolve_icon_widget(app);
-        let button = Self::build_tile_button(
-            "app-icon-card",
-            move |card| card.append(&icon_source),
-            Some(&app.name),
-        );
+        let icon_widget = self.resolve_icon_widget(app);
+        let button = Self::build_tile_button(&icon_widget, Some(&app.name));
 
         let app_id = app.app_id.clone();
         let win = self.clone();
@@ -381,16 +383,24 @@ impl MainWindow {
         button
     }
 
-    /// Real icon if the icon theme can resolve it; letter avatar only as
-    /// a fallback, kept visually distinct in its own light/dark card.
+    /// Real icon (wrapped in a thin light card for contrast) if the icon
+    /// theme can resolve it; a single self-contained letter-avatar box
+    /// otherwise. Never both nested together.
     fn resolve_icon_widget(&self, app: &FlatpakApp) -> gtk4::Widget {
         if !app.icon.is_empty() {
             if let Some(display) = gdk::Display::default() {
                 let theme = gtk4::IconTheme::for_display(&display);
                 if theme.has_icon(&app.icon) {
+                    let card = GtkBox::new(Orientation::Vertical, 0);
+                    card.add_css_class("icon-card");
+                    card.set_halign(Align::Center);
+                    card.set_valign(Align::Center);
+
                     let image = Image::from_icon_name(&app.icon);
-                    image.set_pixel_size(112);
-                    return image.upcast();
+                    image.set_pixel_size(96);
+                    card.append(&image);
+
+                    return card.upcast();
                 }
             }
         }
@@ -411,10 +421,10 @@ impl MainWindow {
         let color_index = (hash as usize) % AVATAR_COLORS;
 
         let avatar = GtkBox::new(Orientation::Vertical, 0);
+        avatar.add_css_class("avatar-box");
         avatar.add_css_class(&format!("avatar-color-{color_index}"));
         avatar.set_halign(Align::Center);
         avatar.set_valign(Align::Center);
-        avatar.set_size_request(112, 112);
 
         let label = Label::new(Some(&letter));
         label.add_css_class("avatar-label");
