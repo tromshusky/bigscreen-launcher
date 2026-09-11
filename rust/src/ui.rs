@@ -292,30 +292,29 @@ impl MainWindow {
         button
     }
 
-    fn letter_avatar(name: &str) -> gtk4::Widget {
-        let letter = name
-            .chars()
-            .next()
-            .map(|c| c.to_uppercase().to_string())
-            .unwrap_or_else(|| "?".to_string());
+    /// Sizes app tiles so exactly `grid_columns` are visible, and shrinks
+    /// the settings tile to ~20% of that size (per UX feedback: it should
+    /// read as a small corner control, not a peer-sized tile).
+    fn apply_tile_sizing(self: &Rc<Self>) {
+        let columns = self.config.borrow().grid_columns.max(1) as f64;
+        let monitor_width = gdk::Display::default()
+            .and_then(|d| d.monitors().item(0))
+            .and_then(|obj| obj.downcast::<gdk::Monitor>().ok())
+            .map(|m| m.geometry().width() as f64)
+            .unwrap_or(1920.0);
 
-        let mut hash: u32 = 0;
-        for b in name.bytes() {
-            hash = hash.wrapping_mul(31).wrapping_add(b as u32);
+        let outer_margins = 64.0;
+        let spacing = 20.0;
+        let usable = monitor_width - outer_margins;
+        let tile_width = ((usable - spacing * (columns - 1.0)) / columns).max(120.0);
+
+        for button in self.buttons.borrow().iter() {
+            button.set_size_request(tile_width as i32, tile_width as i32 + 90);
         }
-        let color_index = (hash as usize) % AVATAR_COLORS;
 
-        let avatar = GtkBox::new(Orientation::Vertical, 0);
-        avatar.add_css_class("avatar-box");
-        avatar.add_css_class(&format!("avatar-color-{color_index}"));
-        avatar.set_halign(Align::Center);
-        avatar.set_valign(Align::Center);
-
-        let label = Label::new(Some(&letter));
-        label.add_css_class("avatar-label");
-        avatar.append(&label);
-
-        avatar.upcast()
+        let settings_size = (tile_width * 0.2).max(56.0);
+        self.settings_button
+            .set_size_request(settings_size as i32, settings_size as i32);
     }
 
     fn setup_input_handlers(self: &Rc<Self>) {
