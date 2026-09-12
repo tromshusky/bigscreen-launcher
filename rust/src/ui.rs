@@ -55,7 +55,7 @@ button.bigscreen-item.selected {
    icons for contrast. Letter avatars do NOT use this; they supply their
    own single colored box instead, to avoid a double-box look. */
 .icon-card {
-    background-color: #f2f2f2;
+/*    background-color: #f2f2f2; */
     border-radius: 16px;
     padding: 12px;
     min-width: 140px;
