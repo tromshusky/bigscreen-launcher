@@ -36,7 +36,7 @@ label {
 
 /* App tiles and settings tile share the same interaction visuals */
 button.bigscreen-item {
-    background-color: transparent;
+  /*  background-color: transparent; */
     border: 4px solid transparent;
     border-radius: 20px;
     padding: 8px;
