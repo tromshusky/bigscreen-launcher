@@ -62,12 +62,14 @@ button.bigscreen-item.selected {
     min-height: 140px;
 }
 .icon-card.settings-card {
-    background-color: #33344a;
+ /*   background-color: #33344a; */
     min-width: 0;
     min-height: 0;
 }
 .icon-card.settings-card image {
     color: #e6e6ec;
+    border-color: #33344a;
+    border-radius: 16px;
 }
 
 /* Letter-avatar fallback: single self-contained colored box */
